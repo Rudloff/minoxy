@@ -198,91 +198,96 @@ function replaceHTML5Blocks($dom)
 
 header_remove('Content-Type');
 $url=$_SERVER['REQUEST_URI'];
-//$url='http://rudloff.pro';
-if ($url!='/') {
-    $headers=(get_headers($url, 1));
-    $contentType=$headers['Content-Type'];
-    if (is_array($contentType)) {
-        $contentType=$contentType[0];
-    }
-    $contentType=explode(';', $contentType);
-    header('Content-Type: '.$contentType[0]);
-    $system=posix_uname();
-    if (defined('FAKE_UA')) {
-        $useragent='Minoxy/'.VERSION.' ('.$system['sysname'].
-        ' '.$system['machine'].';)';
+$urlInfo=parse_url($url);
+if (!isset($urlInfo['host'])) {
+    if (isset($_GET['url'])) {
+        $url=$_GET['url'];
     } else {
-        $useragent=$_SERVER['HTTP_USER_AGENT'];
+        die('Please specify an url (?url=example.com) or use me in proxy mode !');
     }
-    ini_set('user_agent', $useragent);
-    //Cache
-    header('Cache-Control: max-age=2678400');
-    header('Vary: Accept-Encoding');
-    if (defined('COMPRESS_IMAGES') && explode('/', $contentType[0])[0]=='image') {
-        if ($contentType[0]=='image/jpeg') {
-            $image = imagecreatefromjpeg($url);
-        } else if ($contentType[0]=='image/gif') {
-            $image = imagecreatefromgif($url);
-        } else if ($contentType[0]=='image/png') {
-            $image = imagecreatefrompng($url);
+}
+$headers=(get_headers($url, 1));
+$contentType=$headers['Content-Type'];
+if (is_array($contentType)) {
+    $contentType=$contentType[0];
+}
+$contentType=explode(';', $contentType);
+header('Content-Type: '.$contentType[0]);
+$system=posix_uname();
+if (defined('FAKE_UA')) {
+    $useragent='Minoxy/'.VERSION.' ('.$system['sysname'].
+    ' '.$system['machine'].';)';
+} else {
+    $useragent=$_SERVER['HTTP_USER_AGENT'];
+}
+ini_set('user_agent', $useragent);
+//Cache
+header('Cache-Control: max-age=2678400');
+header('Vary: Accept-Encoding');
+if (defined('COMPRESS_IMAGES') && explode('/', $contentType[0])[0]=='image') {
+    if ($contentType[0]=='image/jpeg') {
+        $image = imagecreatefromjpeg($url);
+    } else if ($contentType[0]=='image/gif') {
+        $image = imagecreatefromgif($url);
+    } else if ($contentType[0]=='image/png') {
+        $image = imagecreatefrompng($url);
+    }
+    imagejpeg($image, null, 50);
+} else {
+    if (defined('GZIP')) {
+        header('Content-Encoding: gzip');
+    }
+    $content=file_get_contents($url);
+    header('ETag: '.md5($content));
+    if ($contentType[0]=='text/html') {
+        header('Content-Type: application/xhtml+xml');
+        $domimpl=new DOMImplementation();
+        $dom = $domimpl->createDocument(
+            null, 'html',
+            $domimpl->createDocumentType(
+                'html',
+                '-//W3C//DTD XHTML Basic 1.1//EN',
+                'http://www.w3.org/TR/xhtml-basic/xhtml-basic11.dtd'
+            )
+        );
+        $dom->preserveWhiteSpace=false;
+        $dom->formatOutput=false;
+        $dom->strictErrorChecking=false;
+        $dom->encoding = 'UTF-8';
+        $olddom=new DOMDocument();
+        $oldencoding = mb_detect_encoding($content, 'auto');
+        @$olddom->loadHTML(mb_convert_encoding($content, 'UTF-8', $oldencoding));
+        $dom->removeChild($dom->documentElement);
+        $newHTML = $dom->importNode($olddom->documentElement, true);
+        $dom->appendChild($newHTML);
+        
+        $finder = new DOMXPath($dom);
+        $xmlns=$finder->evaluate('string(@xmlns)');
+        if (empty($xmlns)) {
+            $dom->documentElement
+                ->setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
         }
-        imagejpeg($image, null, 50);
+        
+        removeScripts($dom);
+        $styles=$dom->getElementsByTagName('style');
+        cleanStyleAttributes($dom);
+        for ($i=0;$i<$styles->length;$i++) {
+            $styles->item($i)->setAttribute('type', 'text/css');
+            $styles->item($i)
+                ->nodeValue=cleanCSS($styles->item($i)->nodeValue);
+        }
+        cleanAttributes($dom);
+        replaceHTML5Blocks($dom);
+        output($dom->saveXML());
+    } else if ($contentType[0]=='text/javascript'
+        || $contentType[0]=='text/css'
+    ) {
+        if ($contentType[0]=='text/css') {
+            $content=cleanCSS($content);
+        }
+        output(preg_replace('/\v/', '', $content));
     } else {
-        if (defined('GZIP')) {
-            header('Content-Encoding: gzip');
-        }
-        $content=file_get_contents($url);
-        header('ETag: '.md5($content));
-        if ($contentType[0]=='text/html') {
-            header('Content-Type: application/xhtml+xml');
-            $domimpl=new DOMImplementation();
-            $dom = $domimpl->createDocument(
-                null, 'html',
-                $domimpl->createDocumentType(
-                    'html',
-                    '-//W3C//DTD XHTML Basic 1.1//EN',
-                    'http://www.w3.org/TR/xhtml-basic/xhtml-basic11.dtd'
-                )
-            );
-            $dom->preserveWhiteSpace=false;
-            $dom->formatOutput=false;
-            $dom->strictErrorChecking=false;
-            $dom->encoding = 'UTF-8';
-            $olddom=new DOMDocument();
-            $oldencoding = mb_detect_encoding($content, 'auto');
-            @$olddom->loadHTML(mb_convert_encoding($content, 'UTF-8', $oldencoding));
-            $dom->removeChild($dom->documentElement);
-            $newHTML = $dom->importNode($olddom->documentElement, true);
-            $dom->appendChild($newHTML);
-            
-            $finder = new DOMXPath($dom);
-            $xmlns=$finder->evaluate('string(@xmlns)');
-            if (empty($xmlns)) {
-                $dom->documentElement
-                    ->setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-            }
-            
-            removeScripts($dom);
-            $styles=$dom->getElementsByTagName('style');
-            cleanStyleAttributes($dom);
-            for ($i=0;$i<$styles->length;$i++) {
-                $styles->item($i)->setAttribute('type', 'text/css');
-                $styles->item($i)
-                    ->nodeValue=cleanCSS($styles->item($i)->nodeValue);
-            }
-            cleanAttributes($dom);
-            replaceHTML5Blocks($dom);
-            output($dom->saveXML());
-        } else if ($contentType[0]=='text/javascript'
-            || $contentType[0]=='text/css'
-        ) {
-            if ($contentType[0]=='text/css') {
-                $content=cleanCSS($content);
-            }
-            output(preg_replace('/\v/', '', $content));
-        } else {
-            output($content);
-        }
+        output($content);
     }
 }
 ?>
