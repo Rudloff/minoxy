@@ -98,7 +98,15 @@ function replaceURLs($dom) {
 			if (!isset($ressource['host'])) {
 				$ressource['host']=$url['host'];
 			}
-			$items->item($i)->ownerElement->setAttribute($attribute, 'http://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'].'?url='.$ressource['scheme'].'://'.$ressource['host'].'/'.$ressource['path']);
+            if (!isset($ressource['path'])) {
+				$ressource['path']='/';
+			}
+            if (substr($ressource['path'], 0, 2)=='//') {
+                //Strange URLs on Wikipedia
+                $items->item($i)->ownerElement->setAttribute($attribute, 'http://'.substr($ressource['path'], 2));
+            } else {
+                $items->item($i)->ownerElement->setAttribute($attribute, 'http://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'].'?url='.$ressource['scheme'].'://'.$ressource['host'].'/'.$ressource['path']);
+            }
 		}
 	}
 }
