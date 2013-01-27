@@ -46,21 +46,51 @@ function output ($string)
  * */
 function cleanCSS($css, $tag=null)
 {
+	
     $properties=array('position', 'display', 'float', 'max-width', 'min-width',
     'top', 'left', 'right', 'bottom', 'min-height', 'max-height',
-    'border-collapse');
+    'border-collapse', 'background-image');
     if (isset($tag)) {
         $css=$tag.' { '.$css.' }';
     }
     
     $CSSObject = new HTML_CSS();
+    $CSSObject->setCharset('UTF-8');
     @$CSSObject->parseString($css);
     foreach ($properties as $property) {
         $results=$CSSObject->grepStyle('/.*/', '/^'.$property.'$/');
         foreach ($results as $name=>$values) {
             unset($CSSObject->_css[$name][$property]);
+            foreach ($CSSObject->_groups as $key=>$group) {
+				if (in_array($name, $group)) {
+					$CSSObject->removeGroupSelector(substr($key, 2), $name);
+				}
+			}
+			foreach ($CSSObject->_groups as $key=>$group) {
+				if (empty($group)) {
+					$CSSObject->unsetGroup(substr($key, 2));
+				}
+			}
         }
     }
+    //Remove pseudo-classes
+    $pseudoClasses=array('hover', 'last-child', 'after', 'first-letter');  
+    foreach ($pseudoClasses as $pseudo) {
+		$results=$CSSObject->grepStyle('/:'.$pseudo.'/');
+		foreach ($results as $name=>$values) {
+			unset($CSSObject->_css[$name]);
+			foreach ($CSSObject->_groups as $key=>$group) {
+				if (in_array($name, $group)) {
+					$CSSObject->removeGroupSelector(substr($key, 2), $name);
+				}
+			}
+			foreach ($CSSObject->_groups as $key=>$group) {
+				if (empty($group)) {
+					$CSSObject->unsetGroup(substr($key, 2));
+				}
+			}
+		}
+	}
     if (isset($tag)) {
         $css=$CSSObject->toInline($tag);
     } else {
@@ -104,27 +134,36 @@ function replaceURLs($dom)
             $ressource=parse_url(
                 $items->item($i)->ownerElement->getAttribute($attribute)
             );
-            if (!isset($ressource['scheme'])) {
-                $ressource['scheme']=$url['scheme'];
-            }
-            if (!isset($ressource['host'])) {
-                $ressource['host']=$url['host'];
-            }
-            if (!isset($ressource['path'])) {
-                $ressource['path']='/';
-            }
-            if (substr($ressource['path'], 0, 2)=='//') {
-                //Strange URLs on Wikipedia
-                $items->item($i)->ownerElement->setAttribute(
-                    $attribute, 'http://'.substr($ressource['path'], 2)
-                );
-            } else {
-                $items->item($i)->ownerElement->setAttribute(
-                    $attribute, 'http://'.$_SERVER['HTTP_HOST'].
-                    $_SERVER['SCRIPT_NAME'].'?url='.$ressource['scheme'].
-                    '://'.$ressource['host'].'/'.$ressource['path']
-                );
-            }
+            if (!isset($ressource['scheme']) || $ressource['scheme']!='mailto') {
+				if (!isset($ressource['scheme'])) {
+					$ressource['scheme']=$url['scheme'];
+				}
+				if (!isset($ressource['host'])) {
+					$ressource['host']=$url['host'];
+				}
+				if (!isset($ressource['path'])) {
+					$ressource['path']='';
+				}
+				if (isset($ressource['query'])) {
+						$query='?'.$ressource['query'];
+					} else {
+						$query='';
+					}
+				if (substr($ressource['path'], 0, 2)=='//') {
+					//Strange URLs on Wikipedia
+					$items->item($i)->ownerElement->setAttribute(
+						$attribute, 'http://'.$_SERVER['HTTP_HOST'].
+						$_SERVER['SCRIPT_NAME'].'?url='.urlencode('http://'.
+						substr($ressource['path'], 2).$query)
+					);
+				} else {
+					$items->item($i)->ownerElement->setAttribute(
+						$attribute, 'http://'.$_SERVER['HTTP_HOST'].
+						$_SERVER['SCRIPT_NAME'].'?url='.$ressource['scheme'].
+						'://'.$ressource['host'].'/'.$ressource['path'].$query
+					);
+				}
+			}
         }
     }
 }
@@ -143,6 +182,17 @@ function removeHTML5Data($dom)
     for ($i=0;$i<$items->length;$i++) {
         $items->item($i)->ownerElement->removeAttribute($items->item($i)->name);
     }
+}
+function removeHTML5InputTypes($dom)
+{
+    $finder = new DomXPath($dom);
+    $types=array('search', 'number');
+    foreach ($types as $type) {
+		$items = $finder->query('//*[@type="'.$type.'"]');
+		for ($i=0;$i<$items->length;$i++) {
+			$items->item($i)->removeAttribute('type');
+		}
+	}
 }
 
 /**
@@ -179,11 +229,14 @@ function cleanMetaCharset($dom)
  * */
 function cleanAttributes($dom)
 {
-    $attributes=array('itemprop', 'itemscope', 'itemtype', 'border');
+    $attributes=array('itemprop', 'itemscope', 'itemtype',
+    'border', 'colspan', 'dir', 'role', 'cellpadding', 'cellspacing',
+    'srcset', 'align', 'width', 'target');
     foreach ($attributes as $attribute) {
         removeAttribute($dom, $attribute);
     }
     removeHTML5Data($dom);
+    removeHTML5InputTypes($dom);
     cleanMetaCharset($dom);
 }
 
@@ -231,15 +284,14 @@ function removeScripts($dom)
  * */
 function replaceHTML5Blocks($dom)
 {
-    $tags=array('header', 'footer', 'nav', 'section');
+    $tags=array('header', 'footer', 'nav', 'section', 'tr', 'table', 'td', 'th');
     foreach ($tags as $tag) {
         $elements=$dom->getElementsByTagName($tag);
-        for ($i=0;$i<$elements->length;$i++) {
+        for ($i=$elements->length-1; $i>=0; $i--) {
             $oldtag=$elements->item($i);
             $newtag=$dom->createElement('div');
             foreach ($oldtag->attributes as $attribute) {
                 $newtag->setAttribute($attribute->name, $attribute->value);
-                
             }
             foreach ($oldtag->childNodes as $child) {
                 $newtag->appendChild($child->cloneNode(true));
@@ -259,7 +311,7 @@ function replaceHTML5Blocks($dom)
 function convertToUTF8($content)
 {
     $oldencoding = mb_detect_encoding($content, 'auto');
-    return mb_convert_encoding($content, 'UTF-8', $oldencoding);
+    return mb_convert_encoding($content, 'HTML-ENTITIES', $oldencoding);
 }
 
 header_remove('Content-Type');
@@ -299,6 +351,8 @@ if (defined('COMPRESS_IMAGES') && $basicType=='image') {
         $image = imagecreatefromgif($url);
     } else if ($contentType[0]=='image/png') {
         $image = imagecreatefrompng($url);
+    } else if ($contentType[0]=='image/svg+xml') {
+        //$image = imagecreatefromsvg($url);
     }
     header('Content-Type: image/jpeg');
     imagejpeg($image, null, 50);
@@ -306,59 +360,70 @@ if (defined('COMPRESS_IMAGES') && $basicType=='image') {
     if (defined('GZIP')) {
         header('Content-Encoding: gzip');
     }
-    $content=file_get_contents($url);
-    header('ETag: "'.md5($content).'"');
-    if ($contentType[0]=='text/html') {
-        header('Content-Type: application/xhtml+xml; charset=UTF-8');
-        $domimpl=new DOMImplementation();
-        $dom = $domimpl->createDocument(
-            null, 'html',
-            $domimpl->createDocumentType(
-                'html',
-                '-//W3C//DTD XHTML Basic 1.1//EN',
-                'http://www.w3.org/TR/xhtml-basic/xhtml-basic11.dtd'
-            )
-        );
-        $dom->preserveWhiteSpace=false;
-        $dom->formatOutput=false;
-        $dom->strictErrorChecking=false;
-        $dom->encoding = 'UTF-8';
-        $olddom=new DOMDocument();
-        @$olddom->loadHTML(convertToUTF8($content));
-        $dom->removeChild($dom->documentElement);
-        $newHTML = $dom->importNode($olddom->documentElement, true);
-        $dom->appendChild($newHTML);
-        
-        $finder = new DOMXPath($dom);
-        $xmlns=$finder->evaluate('string(@xmlns)');
-        if (empty($xmlns)) {
-            $dom->documentElement
-                ->setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-        }
-        
-        removeScripts($dom);
-        $styles=$dom->getElementsByTagName('style');
-        cleanStyleAttributes($dom);
-        for ($i=0;$i<$styles->length;$i++) {
-            $styles->item($i)->setAttribute('type', 'text/css');
-            $styles->item($i)
-                ->nodeValue=cleanCSS($styles->item($i)->nodeValue);
-        }
-        cleanAttributes($dom);
-        replaceHTML5Blocks($dom);
-        replaceURLs($dom);
-        output($dom->saveXML());
-    } else if ($contentType[0]=='text/javascript'
-        || $contentType[0]=='text/css'
-    ) {
-        if ($contentType[0]=='text/css') {
-            $content=cleanCSS($content);
-        }
-        header('Content-Type: text/css; charset=UTF-8');
-        convertToUTF8($content);
-        output(preg_replace('/\v/', '', $content));
-    } else {
-        output($content);
-    }
+    if ($content=file_get_contents($url)) {
+		$etag='"'.md5($content).'"';
+		header('ETag: '.$etag);
+		if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && $_SERVER['HTTP_IF_NONE_MATCH']==$etag) {
+			header("HTTP/1.1 304 Not Modified");
+		} else {
+			if ($contentType[0]=='text/html') {
+				header('Content-Type: application/xhtml+xml; charset=UTF-8');
+				libxml_use_internal_errors(true);
+				$domimpl=new DOMImplementation();
+				$dom = $domimpl->createDocument(
+					null, 'html',
+					$domimpl->createDocumentType(
+						'html',
+						'-//W3C//DTD XHTML Basic 1.1//EN',
+						'http://www.w3.org/TR/xhtml-basic/xhtml-basic11.dtd'
+					)
+				);
+				$dom->preserveWhiteSpace=false;
+				$dom->formatOutput=false;
+				$dom->strictErrorChecking=false;
+				$dom->encoding='utf-8';
+				$olddom=new DOMDocument();
+				$olddom->XMLencoding='utf-8';
+				$olddom->loadHTML(convertToUTF8($content));
+				$dom->removeChild($dom->documentElement);
+				$newHTML = $dom->importNode($olddom->documentElement, true);
+				$dom->appendChild($newHTML);
+							
+				$finder = new DOMXPath($dom);
+				$xmlns=$finder->evaluate('string(@xmlns)');
+				if (empty($xmlns)) {
+					$dom->documentElement
+						->setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+				}
+				
+				removeScripts($dom);
+				$styles=$dom->getElementsByTagName('style');
+				cleanStyleAttributes($dom);
+				for ($i=0;$i<$styles->length;$i++) {
+					$styles->item($i)->setAttribute('type', 'text/css');
+					$styles->item($i)
+						->nodeValue=cleanCSS($styles->item($i)->nodeValue);
+				}
+				cleanAttributes($dom);
+				replaceHTML5Blocks($dom);
+				replaceURLs($dom);
+				output($dom->saveXML());
+			} else if ($contentType[0]=='text/javascript'
+				|| $contentType[0]=='text/css'
+			) {
+				if ($contentType[0]=='text/css') {
+					$content=cleanCSS($content);
+				}
+				header('Content-Type: text/css; charset=UTF-8');
+				convertToUTF8($content);
+				output(preg_replace('/\v/', '', $content));
+			} else {
+				output($content);
+			}
+		}
+	} else {
+		header('HTTP/1.0 404 Not Found');
+		die("Can't find page !");
+	}
 }
 ?>
