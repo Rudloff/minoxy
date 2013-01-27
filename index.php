@@ -44,7 +44,15 @@ function removeCSSProp($prop, $css)
     return preg_replace('/\s*'.$prop.':\s*\w*;/', '', $css);
 }
 
-function cleanCSS($css) {
+/**
+ * Remove unwanted properties in CSS code
+ * 
+ * @param string $css CSS code
+ * 
+ * @return string
+ * */
+function cleanCSS($css)
+{
     $css=removeCSSProp('float', $css);
     $css=removeCSSProp('width', $css);
     $css=removeCSSProp('height', $css);
@@ -68,7 +76,8 @@ if ($url!='/') {
     header('Content-Type: '.$contentType[0]);
     $system=posix_uname();
     if (defined('FAKE_UA')) {
-        $useragent='Minoxy/'.VERSION.' ('.$system['sysname'].' '.$system['machine'].';)';
+        $useragent='Minoxy/'.VERSION.' ('.$system['sysname'].
+        ' '.$system['machine'].';)';
         if ($system['sysname']!='Android') {
             $useragent.=' like Android';
         }
@@ -103,8 +112,8 @@ if ($url!='/') {
             @$dom->loadHTML($content);
             $scripts=$dom->getElementsByTagName('script');
             for ($i=0;$i<$scripts->length;$i++) {
-               $scripts->item($i)->removeAttribute('src');
-               $scripts->item($i)->nodeValue='';
+                $scripts->item($i)->removeAttribute('src');
+                $scripts->item($i)->nodeValue='';
             }
             $styles=$dom->getElementsByTagName('style');
             for ($i=0;$i<$styles->length;$i++) {
