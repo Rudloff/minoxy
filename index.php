@@ -224,7 +224,9 @@ ini_set('user_agent', $useragent);
 //Cache
 header('Cache-Control: max-age=2678400');
 header('Vary: Accept-Encoding');
-if (defined('COMPRESS_IMAGES') && explode('/', $contentType[0])[0]=='image') {
+$basicType=explode('/', $contentType[0]);
+$basicType=$basicType[0];
+if (defined('COMPRESS_IMAGES') && $basicType=='image') {
     if ($contentType[0]=='image/jpeg') {
         $image = imagecreatefromjpeg($url);
     } else if ($contentType[0]=='image/gif') {
