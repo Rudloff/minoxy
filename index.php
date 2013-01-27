@@ -61,11 +61,10 @@ function cleanCSS($css, $tag=null)
             unset($CSSObject->_css[$name][$property]);
         }
     }
-    $css=$CSSObject->toString();
     if (isset($tag)) {
-        $css=str_replace(PHP_EOL, ' ', $css);
-        $css=preg_replace('/\s\w+\s{\s*/', '', $css);
-        $css=preg_replace('/\s*}\s/', '', $css);
+        $css=$CSSObject->toInline($tag);
+    } else {
+        $css=$CSSObject->toString();
     }
     return $css;
 }
