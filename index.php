@@ -12,6 +12,8 @@
  * @link     https://svn.strasweb.fr/listing.php?
  *           repname=Pierre+Rudloff&path=%2Fproxy%2F
  * */
+//Includes
+@require_once 'HTML/CSS.php';
 //Config
 define('COMPRESS_IMAGES', true);
 //define('GZIP', true);
@@ -34,20 +36,6 @@ function output ($string)
     }
 }
 
-/**
- * Remove a specific CSS property from CSS code
- * 
- * @param string $prop Property to remove
- * @param string $css  CSS code
- * 
- * @return string Modifie CSS code
- * */
-function removeCSSProp($prop, $css)
-{
-    //We need a real CSS parser.
-    $css=preg_replace('/\s+'.$prop.':\s*\w*;/', '', $css);
-    return $css;
-}
 
 /**
  * Remove unwanted properties in CSS code
@@ -56,13 +44,28 @@ function removeCSSProp($prop, $css)
  * 
  * @return string
  * */
-function cleanCSS($css)
+function cleanCSS($css, $tag=null)
 {
     $properties=array('position', 'display', 'float', 'max-width', 'min-width',
     'top', 'left', 'right', 'bottom', 'min-height', 'max-height',
     'border-collapse');
+    if (isset($tag)) {
+        $css=$tag.' { '.$css.' }';
+    }
+    
+    $CSSObject = new HTML_CSS();
+    @$CSSObject->parseString($css);
     foreach ($properties as $property) {
-        $css=removeCSSProp($property, $css);
+        $results=$CSSObject->grepStyle('/.*/', '/^'.$property.'$/');
+        foreach ($results as $name=>$values) {
+            unset($CSSObject->_css[$name][$property]);
+        }
+    }
+    $css=$CSSObject->toString();
+    if (isset($tag)) {
+        $css=str_replace(PHP_EOL, ' ', $css);
+        $css=preg_replace('/\s\w+\s{\s*/', '', $css);
+        $css=preg_replace('/\s*}\s/', '', $css);
     }
     return $css;
 }
@@ -198,7 +201,7 @@ function cleanStyleAttributes($dom)
     $styles = $finder->query('//*[@style]');
     for ($i=0;$i<$styles->length;$i++) {
         $element=$styles->item($i);
-        $element->setAttribute('style', cleanCSS($element->getAttribute('style')));
+        $element->setAttribute('style', cleanCSS($element->getAttribute('style'), $element->nodeName));
     }
 }
 
