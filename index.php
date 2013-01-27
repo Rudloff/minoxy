@@ -13,7 +13,7 @@
  *           repname=Pierre+Rudloff&path=%2Fproxy%2F
  * */
 //Config
-//define('COMPRESS_IMAGES', true);
+define('COMPRESS_IMAGES', true);
 //define('GZIP', true);
 define('FAKE_UA', true);
 define('VERSION', 0.1);
@@ -45,7 +45,8 @@ function output ($string)
 function removeCSSProp($prop, $css)
 {
     //We need a real CSS parser.
-    return preg_replace('/\s*'.$prop.':\s*\w*;/', '', $css);
+    $css=preg_replace('/\s+'.$prop.':\s*\w*;/', '', $css);
+    return $css;
 }
 
 /**
@@ -57,7 +58,9 @@ function removeCSSProp($prop, $css)
  * */
 function cleanCSS($css)
 {
-    $properties=array('position', 'display', 'float', 'max-width');
+    $properties=array('position', 'display', 'float', 'max-width', 'min-width',
+    'top', 'left', 'right', 'bottom', 'min-height', 'max-height',
+    'border-collapse');
     foreach ($properties as $property) {
         $css=removeCSSProp($property, $css);
     }
@@ -79,6 +82,25 @@ function removeAttribute($dom, $attribute)
     for ($i=0;$i<$items->length;$i++) {
         $items->item($i)->ownerElement->removeAttribute($attribute);
     }
+}
+
+function replaceURLs($dom) {
+    $finder = new DomXPath($dom);
+    $attributes=array('href', 'src');
+    foreach ($attributes as $attribute) {
+		$items = $finder->query('//*/@'.$attribute);
+		for ($i=0;$i<$items->length;$i++) {
+			$url=(parse_url($_GET['url']));
+			$ressource=parse_url($items->item($i)->ownerElement->getAttribute($attribute));
+			if (!isset($ressource['scheme'])) {
+				$ressource['scheme']=$url['scheme'];
+			}
+			if (!isset($ressource['host'])) {
+				$ressource['host']=$url['host'];
+			}
+			$items->item($i)->ownerElement->setAttribute($attribute, 'http://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'].'?url='.$ressource['scheme'].'://'.$ressource['host'].'/'.$ressource['path']);
+		}
+	}
 }
 
 /**
@@ -112,8 +134,13 @@ function cleanMetaCharset($dom)
     $meta=$meta->item(0);
     if (isset($meta)) {
         $meta->setAttribute('http-equiv', 'Content-Type'); 
-        $meta->setAttribute('content', 'text/html; charset=UTF-8');
+        $meta->setAttribute('content', 'application/xhtml+xml; charset=UTF-8');
         $meta->removeAttribute('charset');
+    }
+    $meta = $finder->query('//meta[@http-equiv="Content-Type"]');
+    $meta=$meta->item(0);
+    if (isset($meta)) {
+        $meta->setAttribute('content', 'application/xhtml+xml; charset=UTF-8');
     }
 }
 
@@ -126,7 +153,7 @@ function cleanMetaCharset($dom)
  * */
 function cleanAttributes($dom)
 {
-    $attributes=array('itemprop', 'itemscope', 'itemtype');
+    $attributes=array('itemprop', 'itemscope', 'itemtype', 'border');
     foreach ($attributes as $attribute) {
         removeAttribute($dom, $attribute);
     }
@@ -196,6 +223,11 @@ function replaceHTML5Blocks($dom)
     }
 }
 
+function convertToUTF8($content) {
+	$oldencoding = mb_detect_encoding($content, 'auto');
+	return mb_convert_encoding($content, 'UTF-8', $oldencoding);
+}
+
 header_remove('Content-Type');
 $url=$_SERVER['REQUEST_URI'];
 $urlInfo=parse_url($url);
@@ -234,15 +266,16 @@ if (defined('COMPRESS_IMAGES') && $basicType=='image') {
     } else if ($contentType[0]=='image/png') {
         $image = imagecreatefrompng($url);
     }
+    header('Content-Type: image/jpeg');
     imagejpeg($image, null, 50);
 } else {
     if (defined('GZIP')) {
         header('Content-Encoding: gzip');
     }
     $content=file_get_contents($url);
-    header('ETag: '.md5($content));
+    header('ETag: "'.md5($content).'"');
     if ($contentType[0]=='text/html') {
-        header('Content-Type: application/xhtml+xml');
+        header('Content-Type: application/xhtml+xml; charset=UTF-8');
         $domimpl=new DOMImplementation();
         $dom = $domimpl->createDocument(
             null, 'html',
@@ -257,8 +290,7 @@ if (defined('COMPRESS_IMAGES') && $basicType=='image') {
         $dom->strictErrorChecking=false;
         $dom->encoding = 'UTF-8';
         $olddom=new DOMDocument();
-        $oldencoding = mb_detect_encoding($content, 'auto');
-        @$olddom->loadHTML(mb_convert_encoding($content, 'UTF-8', $oldencoding));
+        @$olddom->loadHTML(convertToUTF8($content));
         $dom->removeChild($dom->documentElement);
         $newHTML = $dom->importNode($olddom->documentElement, true);
         $dom->appendChild($newHTML);
@@ -280,6 +312,7 @@ if (defined('COMPRESS_IMAGES') && $basicType=='image') {
         }
         cleanAttributes($dom);
         replaceHTML5Blocks($dom);
+        replaceURLs($dom);
         output($dom->saveXML());
     } else if ($contentType[0]=='text/javascript'
         || $contentType[0]=='text/css'
@@ -287,6 +320,8 @@ if (defined('COMPRESS_IMAGES') && $basicType=='image') {
         if ($contentType[0]=='text/css') {
             $content=cleanCSS($content);
         }
+        header('Content-Type: text/css; charset=UTF-8');
+        convertToUTF8($content);
         output(preg_replace('/\v/', '', $content));
     } else {
         output($content);
