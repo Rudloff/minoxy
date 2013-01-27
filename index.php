@@ -1,16 +1,58 @@
 <?php
+/**
+ * Minoxy
+ * Proxy to adapt web pages to mobile browsing
+ * 
+ * PHP version 5.4.6
+ * 
+ * @category Proxy
+ * @package  Minoxy
+ * @author   Pierre Rudloff <contact@rudloff.pro>
+ * @license  AGPL http://www.gnu.org/licenses/agpl-3.0.html
+ * @link     https://svn.strasweb.fr/listing.php?
+ *           repname=Pierre+Rudloff&path=%2Fproxy%2F
+ * */
 //Config
 //define('COMPRESS_IMAGES', true);
+define('FAKE_UA', true);
+define('VERSION', 0.1);
 
+/**
+ * Compress a string and outputs it to the browser
+ * 
+ * @param string $string The string to output
+ * 
+ * @return void
+ * */
 function output ($string)
 {
     //print(gzencode($string));
     print(($string));
 }
 
+/**
+ * Remove a specific CSS property from CSS code
+ * 
+ * @param string $prop Property to remove
+ * @param string $css  CSS code
+ * 
+ * @return string Modifie CSS code
+ * */
 function removeCSSProp($prop, $css)
 {
-    return preg_replace('/\s*'.$prop.':.*;/', '', $css);
+    return preg_replace('/\s*'.$prop.':\s*\w*;/', '', $css);
+}
+
+function cleanCSS($css) {
+    $css=removeCSSProp('float', $css);
+    $css=removeCSSProp('width', $css);
+    $css=removeCSSProp('height', $css);
+    $css=removeCSSProp('position', $css);
+    $css=removeCSSProp('margin\-\w+', $css);
+    $css=removeCSSProp('background-image', $css);
+    //We should target only the image in background
+    //$css=removeCSSProp('background', $css);
+    return $css;
 }
 
 header_remove('Content-Type');
@@ -23,7 +65,16 @@ if ($url!='/') {
     }
     $contentType=explode(';', $contentType);
     header('Content-Type: '.$contentType[0]);
-    ini_set('user_agent', $_SERVER['HTTP_USER_AGENT']);
+    $system=posix_uname();
+    if (defined('FAKE_UA')) {
+        $useragent='Minoxy/'.VERSION.' ('.$system['sysname'].' '.$system['machine'].';)';
+        if ($system['sysname']!='Android') {
+            $useragent.=' like Android';
+        }
+    } else {
+        $useragent=$_SERVER['HTTP_USER_AGENT'];
+    }
+    ini_set('user_agent', $useragent);
     //Cache
     header('Cache-Control: max-age=2678400');
     header('Vary: Accept-Encoding');
@@ -49,22 +100,21 @@ if ($url!='/') {
                 $dom->encoding = explode('=', $contentType[1])[1];
             }
             @$dom->loadHTML($content);
-            $styles=$dom->getElementsByTagName('script');
+            $scripts=$dom->getElementsByTagName('script');
+            for ($i=0;$i<$scripts->length;$i++) {
+                $scripts->item($i)->parentNode->removeChild($scripts->item($i));
+            }
+            $styles=$dom->getElementsByTagName('style');
             for ($i=0;$i<$styles->length;$i++) {
                 $styles->item($i)
-                    ->nodeValue=removeCSSProp('float', $styles->item($i)->nodeValue);
-                $styles->item($i)
-                    ->nodeValue=removeCSSProp('width', $styles->item($i)->nodeValue);
+                    ->nodeValue=cleanCSS($styles->item($i)->nodeValue);
             }
             output($dom->saveHTML());
         } else if ($contentType[0]=='text/javascript'
             || $contentType[0]=='text/css'
         ) {
             if ($contentType[0]=='text/css') {
-                $content=removeCSSProp('float', $content);
-                $content=removeCSSProp('width', $content);
-                $content=removeCSSProp('margin\-\w+', $content);
-                $content=removeCSSProp('background-image', $content);
+                $content=cleanCSS($content);
             }
             output(preg_replace('/\v/', '', $content));
         } else {
