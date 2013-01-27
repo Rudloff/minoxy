@@ -14,6 +14,7 @@
  * */
 //Config
 //define('COMPRESS_IMAGES', true);
+//define('GZIP', true);
 define('FAKE_UA', true);
 define('VERSION', 0.1);
 
@@ -26,8 +27,11 @@ define('VERSION', 0.1);
  * */
 function output ($string)
 {
-    //print(gzencode($string));
-    print(($string));
+    if (defined('GZIP')) {
+        print(gzencode($string));
+    } else {
+        print(($string));
+    }
 }
 
 /**
@@ -98,7 +102,9 @@ if ($url!='/') {
         }
         imagejpeg($image, null, 50);
     } else {
-        //header('Content-Encoding: gzip');
+        if (defined('GZIP')) {
+            header('Content-Encoding: gzip');
+        }
         $content=file_get_contents($url);
         header('ETag: '.md5($content));
         if ($contentType[0]=='text/html') {
