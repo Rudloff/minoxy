@@ -110,9 +110,11 @@ function cleanMetaCharset($dom)
     $finder = new DomXPath($dom);
     $meta = $finder->query('//meta[@charset]');
     $meta=$meta->item(0);
-    $meta->setAttribute('http-equiv', 'Content-Type'); 
-    $meta->setAttribute('content', 'text/html; charset='.$encoding);
-    $meta->removeAttribute('charset');
+    if (isset($meta)) {
+        $meta->setAttribute('http-equiv', 'Content-Type'); 
+        $meta->setAttribute('content', 'text/html; charset=UTF-8');
+        $meta->removeAttribute('charset');
+    }
 }
 
 /**
@@ -209,9 +211,6 @@ if ($url!='/') {
     if (defined('FAKE_UA')) {
         $useragent='Minoxy/'.VERSION.' ('.$system['sysname'].
         ' '.$system['machine'].';)';
-        if ($system['sysname']!='Android') {
-            $useragent.=' like Android';
-        }
     } else {
         $useragent=$_SERVER['HTTP_USER_AGENT'];
     }
@@ -235,6 +234,7 @@ if ($url!='/') {
         $content=file_get_contents($url);
         header('ETag: '.md5($content));
         if ($contentType[0]=='text/html') {
+            header('Content-Type: application/xhtml+xml');
             $domimpl=new DOMImplementation();
             $dom = $domimpl->createDocument(
                 null, 'html',
@@ -247,14 +247,10 @@ if ($url!='/') {
             $dom->preserveWhiteSpace=false;
             $dom->formatOutput=false;
             $dom->strictErrorChecking=false;
-            if (isset($contentType[1])) {
-                $encoding=explode('=', $contentType[1])[1];
-                $dom->encoding = $encoding;
-            } else {
-                $encoding='UTF-8';
-            }
+            $dom->encoding = 'UTF-8';
             $olddom=new DOMDocument();
-            @$olddom->loadHTML($content);
+            $oldencoding = mb_detect_encoding($content, 'auto');
+            @$olddom->loadHTML(mb_convert_encoding($content, 'UTF-8', $oldencoding));
             $dom->removeChild($dom->documentElement);
             $newHTML = $dom->importNode($olddom->documentElement, true);
             $dom->appendChild($newHTML);
