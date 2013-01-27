@@ -57,19 +57,146 @@ function removeCSSProp($prop, $css)
  * */
 function cleanCSS($css)
 {
-    $css=removeCSSProp('float', $css);
-    $css=removeCSSProp('width', $css);
-    $css=removeCSSProp('height', $css);
-    $css=removeCSSProp('position', $css);
-    $css=removeCSSProp('margin\-\w+', $css);
-    $css=removeCSSProp('background-image', $css);
-    //We should target only the image in background.
-    //$css=removeCSSProp('background', $css);
+    $properties=array('position', 'display', 'float', 'max-width');
+    foreach ($properties as $property) {
+        $css=removeCSSProp($property, $css);
+    }
     return $css;
+}
+
+/**
+ * Remove a specifice attribute from every element in the DOM
+ * 
+ * @param DOMDocument $dom       DOM
+ * @param string      $attribute Attribute
+ * 
+ * @return void
+ * */
+function removeAttribute($dom, $attribute)
+{
+    $finder = new DomXPath($dom);
+    $items = $finder->query('//*/@'.$attribute);
+    for ($i=0;$i<$items->length;$i++) {
+        $items->item($i)->ownerElement->removeAttribute($attribute);
+    }
+}
+
+/**
+ * Remove HTML5 data- attributes from the DOM
+ * 
+ * @param DOMDocument $dom DOM
+ * 
+ * @return void
+ * */
+function removeHTML5Data($dom)
+{
+    $finder = new DomXPath($dom);
+    $items = $finder->query('//*/@*[contains(name(), "data")]');
+    for ($i=0;$i<$items->length;$i++) {
+        $items->item($i)->ownerElement->removeAttribute($items->item($i)->name);
+    }
+}
+
+/**
+ * Replace HTML5 charset declaration with the older method
+ * 
+ * @param DOMDocument $dom DOM
+ * 
+ * @return void
+ * */
+function cleanMetaCharset($dom)
+{
+    global $encoding;
+    $finder = new DomXPath($dom);
+    $meta = $finder->query('//meta[@charset]');
+    $meta=$meta->item(0);
+    $meta->setAttribute('http-equiv', 'Content-Type'); 
+    $meta->setAttribute('content', 'text/html; charset='.$encoding);
+    $meta->removeAttribute('charset');
+}
+
+/**
+ * Clean unwanted attributes in order to comply with XHTML Basic 1.1
+ * 
+ * @param DOMDocument $dom DOM
+ * 
+ * @return void
+ * */
+function cleanAttributes($dom)
+{
+    $attributes=array('itemprop', 'itemscope', 'itemtype');
+    foreach ($attributes as $attribute) {
+        removeAttribute($dom, $attribute);
+    }
+    removeHTML5Data($dom);
+    cleanMetaCharset($dom);
+}
+
+/**
+ * Remove unwanted properties from style attributes
+ * 
+ * @param DOMDocument $dom DOM
+ * 
+ * @return void
+ * */
+function cleanStyleAttributes($dom)
+{
+    $finder = new DomXPath($dom);
+    $styles = $finder->query('//*[@style]');
+    for ($i=0;$i<$styles->length;$i++) {
+        $element=$styles->item($i);
+        $element->setAttribute('style', cleanCSS($element->getAttribute('style')));
+    }
+}
+
+/**
+ * Remove every script tag from the DOM
+ * 
+ * @param DOMDocument $dom DOM
+ * 
+ * @return void
+ * */
+function removeScripts($dom)
+{
+    $finder = new DomXPath($dom);
+    $scripts = $finder->query('//script');
+    for ($i=0;$i<$scripts->length;$i++) {
+        $script=$scripts->item($i);
+        $script->parentNode->removeChild($script);
+    }
+}
+
+
+/**
+ * Replace HTML5 semantic blocks with standard divs
+ * 
+ * @param DOMDocument $dom DOM
+ * 
+ * @return void
+ * */
+function replaceHTML5Blocks($dom)
+{
+    $tags=array('header', 'footer', 'nav', 'section');
+    foreach ($tags as $tag) {
+        $elements=$dom->getElementsByTagName($tag);
+        for ($i=0;$i<$elements->length;$i++) {
+            $oldtag=$elements->item($i);
+            $newtag=$dom->createElement('div');
+            foreach ($oldtag->attributes as $attribute) {
+                $newtag->setAttribute($attribute->name, $attribute->value);
+                
+            }
+            foreach ($oldtag->childNodes as $child) {
+                $newtag->appendChild($child->cloneNode(true));
+            }
+            $oldtag->parentNode->replaceChild($newtag, $oldtag);
+        }
+    }
 }
 
 header_remove('Content-Type');
 $url=$_SERVER['REQUEST_URI'];
+//$url='http://rudloff.pro';
 if ($url!='/') {
     $headers=(get_headers($url, 1));
     $contentType=$headers['Content-Type'];
@@ -108,25 +235,48 @@ if ($url!='/') {
         $content=file_get_contents($url);
         header('ETag: '.md5($content));
         if ($contentType[0]=='text/html') {
-            $dom=new DOMDocument();
+            $domimpl=new DOMImplementation();
+            $dom = $domimpl->createDocument(
+                null, 'html',
+                $domimpl->createDocumentType(
+                    'html',
+                    '-//W3C//DTD XHTML Basic 1.1//EN',
+                    'http://www.w3.org/TR/xhtml-basic/xhtml-basic11.dtd'
+                )
+            );
             $dom->preserveWhiteSpace=false;
             $dom->formatOutput=false;
             $dom->strictErrorChecking=false;
             if (isset($contentType[1])) {
-                $dom->encoding = explode('=', $contentType[1])[1];
+                $encoding=explode('=', $contentType[1])[1];
+                $dom->encoding = $encoding;
+            } else {
+                $encoding='UTF-8';
             }
-            @$dom->loadHTML($content);
-            $scripts=$dom->getElementsByTagName('script');
-            for ($i=0;$i<$scripts->length;$i++) {
-                $scripts->item($i)->removeAttribute('src');
-                $scripts->item($i)->nodeValue='';
+            $olddom=new DOMDocument();
+            @$olddom->loadHTML($content);
+            $dom->removeChild($dom->documentElement);
+            $newHTML = $dom->importNode($olddom->documentElement, true);
+            $dom->appendChild($newHTML);
+            
+            $finder = new DOMXPath($dom);
+            $xmlns=$finder->evaluate('string(@xmlns)');
+            if (empty($xmlns)) {
+                $dom->documentElement
+                    ->setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
             }
+            
+            removeScripts($dom);
             $styles=$dom->getElementsByTagName('style');
+            cleanStyleAttributes($dom);
             for ($i=0;$i<$styles->length;$i++) {
+                $styles->item($i)->setAttribute('type', 'text/css');
                 $styles->item($i)
                     ->nodeValue=cleanCSS($styles->item($i)->nodeValue);
             }
-            output($dom->saveHTML());
+            cleanAttributes($dom);
+            replaceHTML5Blocks($dom);
+            output($dom->saveXML());
         } else if ($contentType[0]=='text/javascript'
             || $contentType[0]=='text/css'
         ) {
