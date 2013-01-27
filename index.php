@@ -40,6 +40,7 @@ function output ($string)
  * */
 function removeCSSProp($prop, $css)
 {
+    //We need a real CSS parser.
     return preg_replace('/\s*'.$prop.':\s*\w*;/', '', $css);
 }
 
@@ -50,7 +51,7 @@ function cleanCSS($css) {
     $css=removeCSSProp('position', $css);
     $css=removeCSSProp('margin\-\w+', $css);
     $css=removeCSSProp('background-image', $css);
-    //We should target only the image in background
+    //We should target only the image in background.
     //$css=removeCSSProp('background', $css);
     return $css;
 }
@@ -102,7 +103,8 @@ if ($url!='/') {
             @$dom->loadHTML($content);
             $scripts=$dom->getElementsByTagName('script');
             for ($i=0;$i<$scripts->length;$i++) {
-                $scripts->item($i)->parentNode->removeChild($scripts->item($i));
+               $scripts->item($i)->removeAttribute('src');
+               $scripts->item($i)->nodeValue='';
             }
             $styles=$dom->getElementsByTagName('style');
             for ($i=0;$i<$styles->length;$i++) {
