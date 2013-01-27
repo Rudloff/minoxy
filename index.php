@@ -84,31 +84,47 @@ function removeAttribute($dom, $attribute)
     }
 }
 
-function replaceURLs($dom) {
+/**
+ * Replace URLs in DOM to use the proxy
+ * 
+ * @param DOMDocument $dom DOM
+ * 
+ * @return void
+ * */
+function replaceURLs($dom)
+{
     $finder = new DomXPath($dom);
     $attributes=array('href', 'src');
     foreach ($attributes as $attribute) {
-		$items = $finder->query('//*/@'.$attribute);
-		for ($i=0;$i<$items->length;$i++) {
-			$url=(parse_url($_GET['url']));
-			$ressource=parse_url($items->item($i)->ownerElement->getAttribute($attribute));
-			if (!isset($ressource['scheme'])) {
-				$ressource['scheme']=$url['scheme'];
-			}
-			if (!isset($ressource['host'])) {
-				$ressource['host']=$url['host'];
-			}
+        $items = $finder->query('//*/@'.$attribute);
+        for ($i=0;$i<$items->length;$i++) {
+            $url=(parse_url($_GET['url']));
+            $ressource=parse_url(
+                $items->item($i)->ownerElement->getAttribute($attribute)
+            );
+            if (!isset($ressource['scheme'])) {
+                $ressource['scheme']=$url['scheme'];
+            }
+            if (!isset($ressource['host'])) {
+                $ressource['host']=$url['host'];
+            }
             if (!isset($ressource['path'])) {
-				$ressource['path']='/';
-			}
+                $ressource['path']='/';
+            }
             if (substr($ressource['path'], 0, 2)=='//') {
                 //Strange URLs on Wikipedia
-                $items->item($i)->ownerElement->setAttribute($attribute, 'http://'.substr($ressource['path'], 2));
+                $items->item($i)->ownerElement->setAttribute(
+                    $attribute, 'http://'.substr($ressource['path'], 2)
+                );
             } else {
-                $items->item($i)->ownerElement->setAttribute($attribute, 'http://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'].'?url='.$ressource['scheme'].'://'.$ressource['host'].'/'.$ressource['path']);
+                $items->item($i)->ownerElement->setAttribute(
+                    $attribute, 'http://'.$_SERVER['HTTP_HOST'].
+                    $_SERVER['SCRIPT_NAME'].'?url='.$ressource['scheme'].
+                    '://'.$ressource['host'].'/'.$ressource['path']
+                );
             }
-		}
-	}
+        }
+    }
 }
 
 /**
@@ -231,9 +247,17 @@ function replaceHTML5Blocks($dom)
     }
 }
 
-function convertToUTF8($content) {
-	$oldencoding = mb_detect_encoding($content, 'auto');
-	return mb_convert_encoding($content, 'UTF-8', $oldencoding);
+/**
+ * Convert text to UTF-8
+ * 
+ * @param string $content Text to convert
+ * 
+ * @return string
+ * */
+function convertToUTF8($content)
+{
+    $oldencoding = mb_detect_encoding($content, 'auto');
+    return mb_convert_encoding($content, 'UTF-8', $oldencoding);
 }
 
 header_remove('Content-Type');
