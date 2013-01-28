@@ -334,7 +334,7 @@ if (!isset($urlInfo['host'])) {
     if (isset($_GET['url'])) {
         $url=$_GET['url'];
     } else {
-        die('Please specify an url (?url=example.com) or use me in proxy mode !');
+        die('Please specify an url (?url=example.com) or use me in proxy mode !'.PHP_EOL);
     }
 }
 $headers=(get_headers($url, 1));
@@ -438,7 +438,7 @@ if (defined('COMPRESS_IMAGES') && $basicType=='image') {
         }
     } else {
         header('HTTP/1.0 404 Not Found');
-        die("Can't find page !");
+        die("Can't find page !".PHP_EOL);
     }
 }
 ?>
