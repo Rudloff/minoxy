@@ -139,31 +139,39 @@ function replaceURLs($dom)
                 if (!isset($ressource['scheme'])) {
                     $ressource['scheme']=$url['scheme'];
                 }
-                if (!isset($ressource['host'])) {
-                    $ressource['host']=$url['host'];
-                }
-                if (!isset($ressource['path'])) {
-                    $ressource['path']='';
-                }
-                if (isset($ressource['query'])) {
-                    $query='?'.$ressource['query'];
-                } else {
-                    $query='';
-                }
-                if (substr($ressource['path'], 0, 2)=='//') {
-                    //Strange URLs on Wikipedia
-                    $items->item($i)->ownerElement->setAttribute(
-                        $attribute, 'http://'.$_SERVER['HTTP_HOST'].
-                        $_SERVER['SCRIPT_NAME'].'?url='.urlencode(
-                            'http://'.substr($ressource['path'], 2).$query
-                        )
-                    );
-                } else {
-                    $items->item($i)->ownerElement->setAttribute(
-                        $attribute, 'http://'.$_SERVER['HTTP_HOST'].
-                        $_SERVER['SCRIPT_NAME'].'?url='.$ressource['scheme'].
-                        '://'.$ressource['host'].'/'.$ressource['path'].$query
-                    );
+                if ($ressource['scheme']=='http' || $ressource['scheme']=='https') {
+                    if (!isset($ressource['host'])) {
+                        $ressource['host']=$url['host'];
+                    }
+                    if (!isset($ressource['path'])) {
+                        $ressource['path']='/';
+                    }
+                    if (isset($ressource['query'])) {
+                        $query='?'.$ressource['query'];
+                    } else {
+                        $query='';
+                    }
+                    if (isset($ressource['fragment'])) {
+                        $query.='#'.$ressource['fragment'];
+                    }
+                    if (substr($ressource['path'], 0, 1)!='/') {
+                        $ressource['path']='/'.$ressource['path'];
+                    }
+                    if (substr($ressource['path'], 0, 2)=='//') {
+                        //Strange URLs on Wikipedia
+                        $items->item($i)->ownerElement->setAttribute(
+                            $attribute, 'http://'.$_SERVER['HTTP_HOST'].
+                            $_SERVER['SCRIPT_NAME'].'?url='.urlencode(
+                                'http://'.substr($ressource['path'], 2).$query
+                            )
+                        );
+                    } else {
+                        $items->item($i)->ownerElement->setAttribute(
+                            $attribute, 'http://'.$_SERVER['HTTP_HOST'].
+                            $_SERVER['SCRIPT_NAME'].'?url='.$ressource['scheme'].
+                            '://'.$ressource['host'].$ressource['path'].$query
+                        );
+                    }
                 }
             }
         }
