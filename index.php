@@ -342,7 +342,10 @@ if (!isset($urlInfo['host'])) {
     if (isset($_GET['url'])) {
         $url=$_GET['url'];
     } else {
-        die('Please specify an url (?url=example.com) or use me in proxy mode !'.PHP_EOL);
+        die(
+            'Please specify an url (?url=example.com) '.
+            'or use me in proxy mode !'.PHP_EOL
+        );
     }
 }
 $headers=(get_headers($url, 1));
