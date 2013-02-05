@@ -20,6 +20,8 @@ define('COMPRESS_IMAGES', true);
 define('FAKE_UA', true);
 define('VERSION', 0.1);
 
+$url=parse_url($_GET['url']);
+
 /**
  * Compress a string and outputs it to the browser
  * 
@@ -45,9 +47,8 @@ function output ($string)
  * 
  * @return string
  * */
-function cleanCSS($css, $tag=null)
+function cleanCSS($css, $tag=null, $dom=null)
 {
-    
     $properties=array('position', 'display', 'float', 'max-width', 'min-width',
     'top', 'left', 'right', 'bottom', 'min-height', 'max-height',
     'border-collapse', 'background-image');
@@ -93,7 +94,12 @@ function cleanCSS($css, $tag=null)
         }
     }
     if (isset($tag)) {
-        $css=$CSSObject->toInline($tag);
+        $head=$dom->getElementsByTagName('head')->item(0);
+        $style=$dom->createElement('style');
+        $style->setAttribute('type', 'text/css');
+        $style->nodeValue=$CSSObject->toString();
+        $head->appendChild($style);
+        return;
     } else {
         $css=$CSSObject->toString();
     }
@@ -126,12 +132,12 @@ function removeAttribute($dom, $attribute)
  * */
 function replaceURLs($dom)
 {
+    $url=parse_url($_GET['url']);
     $finder = new DomXPath($dom);
     $attributes=array('href', 'src');
     foreach ($attributes as $attribute) {
         $items = $finder->query('//*/@'.$attribute);
         for ($i=0;$i<$items->length;$i++) {
-            $url=(parse_url($_GET['url']));
             $ressource=parse_url(
                 $items->item($i)->ownerElement->getAttribute($attribute)
             );
@@ -174,6 +180,28 @@ function replaceURLs($dom)
                     }
                 }
             }
+        }
+    }
+}
+
+function getImgSize($dom)
+{
+    $url=parse_url($_GET['url']);
+    $images=$dom->getElementsByTagName('img');
+    for ($i=0;$i<$images->length;$i++) {
+        $height=$images->item($i)->getAttribute('height');
+        $width=$images->item($i)->getAttribute('width');
+        if (empty($height) || empty($width)) {
+            $image=parse_url($images->item($i)->getAttribute('src'));
+            if(!isset($image['host'])) {
+                $image['host']=$url['host'];
+            }
+            if (substr($image['path'], 0, 1)!='/') {
+                $image['path']='/'.$image['path'];
+            }
+            $infos=(getimagesize('http://'.$image['host'].$image['path']));
+            $images->item($i)->setAttribute('height', $infos[1]);
+            $images->item($i)->setAttribute('width', $infos[0]);
         }
     }
 }
@@ -249,7 +277,7 @@ function cleanAttributes($dom)
 {
     $attributes=array('itemprop', 'itemscope', 'itemtype',
     'border', 'colspan', 'dir', 'role', 'cellpadding', 'cellspacing',
-    'srcset', 'align', 'width', 'target');
+    'srcset', 'align', 'target', 'style');
     foreach ($attributes as $attribute) {
         removeAttribute($dom, $attribute);
     }
@@ -271,10 +299,9 @@ function cleanStyleAttributes($dom)
     $styles = $finder->query('//*[@style]');
     for ($i=0;$i<$styles->length;$i++) {
         $element=$styles->item($i);
-        $element->setAttribute(
-            'style',
-            cleanCSS($element->getAttribute('style'), $element->nodeName)
-        );
+        $class=uniqid();
+        cleanCSS($element->getAttribute('style'), '.'.$class, $dom);
+        $element->setAttribute('class', $element->getAttribute('class').$class);
     }
 }
 
@@ -432,6 +459,7 @@ if (defined('COMPRESS_IMAGES') && $basicType=='image') {
                 }
                 cleanAttributes($dom);
                 replaceHTML5Blocks($dom);
+                getImgSize($dom);
                 replaceURLs($dom);
                 output($dom->saveXML());
             } else if ($contentType[0]=='text/javascript'
